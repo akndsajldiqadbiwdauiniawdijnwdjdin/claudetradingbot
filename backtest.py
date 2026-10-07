@@ -5,7 +5,8 @@ strategy can trade on information it would not have had. Long-only, all-in /
 all-out, with a per-side cost to cover commission and slippage.
 
 Usage:
-    python backtest.py data/FCEL_daily.csv
+    python backtest.py data/FCEL_daily.csv            # full report for one ticker
+    python backtest.py data/*_daily.csv               # plus a cross-ticker summary
 """
 import sys
 
@@ -209,6 +210,8 @@ def main(path):
 
     # Indicators warm up on the slice itself, so each period stands alone.
     for label, part in (("Before " + SPLIT_DATE, df[:SPLIT_DATE]), ("From " + SPLIT_DATE, df[SPLIT_DATE:])):
+        if len(part) < 120:  # too short for the slower indicators to say anything
+            continue
         print(f"=== {label} ({part.index[0].date()} -> {part.index[-1].date()}) ===")
         print(table(part)[["total_%", "max_dd_%", "sharpe", "trades", "win_%", "profit_factor"]]
               .sort_values("total_%", ascending=False).to_string(), "\n")
@@ -225,5 +228,22 @@ def main(path):
     print(grid.rename_axis("entry \\ exit").to_string())
 
 
+def compare(paths):
+    """Full-period total return % of every strategy on every ticker."""
+    cols = {}
+    for path in paths:
+        df = pd.read_csv(path, parse_dates=["date"]).set_index("date")
+        cols[path.split("/")[-1].split("_")[0]] = table(df)["total_%"]
+    out = pd.DataFrame(cols)
+    out["median"] = out.median(axis=1)
+    print("=== Cross-ticker: total return % over each ticker's full history ===")
+    print(out.sort_values("median", ascending=False).to_string())
+
+
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "data/FCEL_daily.csv")
+    paths = sys.argv[1:] or ["data/FCEL_daily.csv"]
+    for path in paths:
+        main(path)
+        print("\n" + "#" * 100 + "\n")
+    if len(paths) > 1:
+        compare(paths)
